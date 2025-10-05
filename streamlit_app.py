@@ -1,56 +1,75 @@
 import streamlit as st
 from openai import OpenAI
 
-# Show title and description.
-st.title("💬 Chatbot")
-st.write(
-    "This is a simple chatbot that uses OpenAI's GPT-3.5 model to generate responses. "
-    "To use this app, you need to provide an OpenAI API key, which you can get [here](https://platform.openai.com/account/api-keys). "
-    "You can also learn how to build this app step by step by [following our tutorial](https://docs.streamlit.io/develop/tutorials/llms/build-conversational-apps)."
+st.set_page_config(
+    page_title="Telangana SC/ST DSS Data Assistant",
+    page_icon="🗺️",
+    layout="centered",
 )
 
-# Ask user for their OpenAI API key via `st.text_input`.
-# Alternatively, you can store the API key in `./.streamlit/secrets.toml` and access it
-# via `st.secrets`, see https://docs.streamlit.io/develop/concepts/connections/secrets-management
-openai_api_key = st.text_input("OpenAI API Key", type="password")
-if not openai_api_key:
-    st.info("Please add your OpenAI API key to continue.", icon="🗝️")
-else:
+st.title("🗺️ Telangana SC/ST DSS Data Assistant")
+st.caption("Ask questions about datasets, analytics, and indicators from the Decision Support System (DSS) Hub.")
 
-    # Create an OpenAI client.
-    client = OpenAI(api_key=openai_api_key)
+# Use secret key if available, else placeholder
+api_key = st.secrets.get("OPENAI_API_KEY", "YOUR_OPENAI_API_KEY")
+client = OpenAI(api_key=api_key)
 
-    # Create a session state variable to store the chat messages. This ensures that the
-    # messages persist across reruns.
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+context = """
+You are an intelligent data assistant for the Telangana SC/ST Decision Support System (DSS).
+This Hub integrates data across five major thematic areas:
+1. Education – literacy rates, school enrolment, dropout rates, higher education access.
+2. Livelihood – employment generation, agricultural activities, SHG (Self Help Group) participation.
+3. Skill Development – vocational training, youth skill programs, employment linkages.
+4. Health – healthcare access, maternal and child health, public health programs.
+5. Financial Inclusion – access to banking, SHG credit, financial literacy programs.
 
-    # Display the existing chat messages via `st.chat_message`.
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+Data is collected through ArcGIS Survey123 and stored in related tables.
+The base survey (CESS_SURVEY_0) contains household-level data with GlobalID.
+All other thematic datasets (Education, Health, Livelihood, Skill Development, Financial Inclusion)
+are linked using the ParentGlobalID field.
 
-    # Create a chat input field to allow the user to enter a message. This will display
-    # automatically at the bottom of the page.
-    if prompt := st.chat_input("What is up?"):
+You are embedded inside an ArcGIS Hub site and must answer in a friendly, concise, and data-aware way.
+If the user asks for specific numbers or insights, guide them to relevant dashboards or datasets on the Hub.
 
-        # Store and display the current prompt.
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+Example sources (replace with actual Hub URLs):
+- Education Dashboard: https://hub.telanganadss.in/education
+- Livelihood Dashboard: https://hub.telanganadss.in/livelihood
+- Health Dashboard: https://hub.telanganadss.in/health
+- Skill Development Dashboard: https://hub.telanganadss.in/skill
+- Financial Inclusion Dashboard: https://hub.telanganadss.in/finance
 
-        # Generate a response using the OpenAI API.
-        stream = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+When unsure, respond: “Please refer to the relevant dashboard or dataset on the DSS Hub for verified data.”
+"""
+
+st.markdown("### 💬 Chat with the Data Assistant")
+
+if "messages" not in st.session_state:
+    st.session_state.messages = [
+        {"role": "assistant", "content": "Hello 👋! I’m your Telangana DSS Data Assistant. How can I help you today?"}
+    ]
+
+for message in st.session_state.messages:
+    st.chat_message(message["role"]).write(message["content"])
+
+user_input = st.chat_input("Ask a question about Telangana SC/ST DSS data...")
+
+if user_input:
+    st.session_state.messages.append({"role": "user", "content": user_input})
+    st.chat_message("user").write(user_input)
+
+    with st.spinner("Analyzing DSS data..."):
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
             messages=[
-                {"role": m["role"], "content": m["content"]}
-                for m in st.session_state.messages
+                {"role": "system", "content": context},
+                *st.session_state.messages,
             ],
-            stream=True,
+            temperature=0.4,
         )
+        answer = response.choices[0].message.content.strip()
 
-        # Stream the response to the chat using `st.write_stream`, then store it in 
-        # session state.
-        with st.chat_message("assistant"):
-            response = st.write_stream(stream)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+    st.chat_message("assistant").write(answer)
+    st.session_state.messages.append({"role": "assistant", "content": answer})
+
+st.divider()
+st.caption("© 2025 Telangana SC/ST DSS | Powered by OpenAI GPT and ArcGIS Hub")
